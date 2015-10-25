@@ -1,4 +1,4 @@
-SRC=lr4.c
+SRC=lr4.c num.c
 EXE=lr4
 EXTRACFLAGS=
 EXTRALDFLAGS=
@@ -15,8 +15,11 @@ fast: phony
 debug: phony
 	$(MAKE) -f Makefile.dev.gcc
 
+distw32: phony
+	$(MAKE) -f Makefile.dist.mingw32
+
 clean:
-	rm -rf $(SRC:.c=.gcno) $(SRC:.c=.gcda) $(SRC:.c=.gcov) $(SRC:.c=.o)
+	rm -rf $(SRC:.c=.gcno) $(SRC:.c=.gcda) $(SRC:.c=.gcov) $(SRC:.c=.o) getline.o
 	rm -rf html gmon.out docs.html $(EXE) *.dyn *.dpi *.lock *.stackdump *.db
 
 phony: 

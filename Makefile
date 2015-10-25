@@ -1,26 +1,24 @@
-SRC=lr.c
 EXE=lr4
-EXTRACFLAGS=
-EXTRALDFLAGS=
-export SRC
-export EXE
-export EXTRACFLAGS
-export EXTRALDFLAGS
+SRCDIR=src
 
 all: fast
 
 
 fast: phony
-	$(MAKE) -C src fast
-	cp src/lr4 .
+	$(MAKE) -C $(SRCDIR) fast
+	cp $(SRCDIR)/$(EXE) .
 
 debug: phony
-	$(MAKE) -C src
-	cp src/lr4 .
+	$(MAKE) -C $(SRCDIR)
+	cp $(SRCDIR)/$(EXE) .
+
+distw32: phony
+	$(MAKE) -C $(SRCDIR) distw32
+	cp $(SRCDIR)/$(EXE) .
 
 clean:
-	$(MAKE) -C src clean
-	rm -rf lr4 gmon.out
+	$(MAKE) -C $(SRCDIR) clean
+	rm -rf $(EXE) gmon.out
 
 phony: 
 	true
