@@ -28,6 +28,10 @@ typedef struct _replace {
 	uint16_t addr;
 } replace;
 
+typedef struct datasize {
+	uint16_t size;
+	uint16_t num;
+} datasize;
 
 /* estrtol (extended strtol) and estrtoul (extended strtoul) are functions to intelligently determine the base of the number to be converted by the strtol functions and return them. */
 /* They function the same as strtol except for the final parameter they accept a type parameter which switches them from expecting hex values in the form 0xF (STDHEX or 0) to just F (NSTDHEX or 1). This is to accomodate the macro assembler. */
@@ -35,5 +39,11 @@ typedef struct _replace {
 long estrtol(char *str, char **endptr, uint8_t type);
 
 unsigned long estrtoul(char *str, char **endptr, uint8_t type);
+
+char *trim(char *str);
+
+char *findreplace(char *str, replace *replaces, unsigned long numreplaces, uint16_t dotdatasize, unsigned char dotdata);
+
+static void addsize(uint16_t size, uint16_t *currsize, datasize **datasizes, unsigned long *numdatasizes);
 
 #endif /* _LR4_H_ */

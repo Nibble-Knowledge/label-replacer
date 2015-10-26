@@ -33,10 +33,18 @@ int main(int argc, char **argv)
 		const char *delims = " \t";
 		/* The list of label replacements */
 		replace *replaces = NULL;
+		datasize *datasizes = NULL;
 		/* Amount of replacements */
 		unsigned long numreplaces = 0;
+		unsigned long numdatasizes = 0;
+		uint16_t currsize = 0;
 		/* Generic looping unit */
 		unsigned int i = 0;		
+		/* If we have an INF, record and output metadata for the assembler. */
+		char inf = 0;
+		FILE *header = NULL;
+		char collectdata = 0;
+		unsigned char firstdata = 0;
 
 		/* Open the definitions file... */
 		defs = fopen(argv[1], "r");
@@ -207,6 +215,8 @@ int main(int argc, char **argv)
 			unsigned char withlabel = 0;
 			/* If this line has a .data statement */
 			unsigned char dotdata = 0;
+			unsigned char dotascii = 0;
+			unsigned char dotasciiz = 0;
 			/* What size the .data statement is - if we are replacing a label and it is not 4, there's a problem! */
 			unsigned long dotdatasize = 0;
 			/* The offset from the label location requested. */
@@ -215,65 +225,253 @@ int main(int argc, char **argv)
 			unsigned int j = 0;
 			/* If this is a comment line. Helps to skip printing useless whitespace. */
 			unsigned char comment = 0;
+			unsigned char alreadyprinted = 0;
 
 			/* If tokens is NULL, we're at the last token. */
 			while(tokens != NULL)
 			{
-				/* Remove the leading whitespace from the string. As this is the same process as above, this could probably be a function. */
-				i = 0;
-				while(isspace((unsigned char)tokens[i]))
-				{	
-					i++;
-					/* If we travel past the end of the string, the string is empty. */
-					if(i > strlen(tokens))
-					{
-						break;
-					}
-				}
+				tempstr = trim(tokens);
 				/* If after skipping whitespace, the first character is ";" or "#", this token and all that follow on this line are part of a command. Don't print it or a newline. */
-				if(tokens[i] == ';' || tokens[i] == '#')
+				if(tempstr[0] == ';' || tokens[i] == '#')
 				{
 					comment = 1;
 					break;
 				}
-				
-				/* Get our string... */
-				tempstr = calloc(1, strlen(tokens));
-				
-				if(tempstr == NULL)
-				{
-					perror("Could not allocate memory");
-					return 4;
-				}
-				/* Trim trailing whitespace. Same process as done about, could really be part of a function. */
-				for(i = i, j = 0; i < strlen(tokens) && j < strlen(tokens); i++, j++)
-				{
-					if(isspace((unsigned char)tokens[i]))
-					{
-						break;
-					}
-					tempstr[j] = tokens[i];
-				}
-				/* Terminate the string here as it is the end, and stop some potential weirdness. */
-				tempstr[j] = '\0';
+
 				/* If it's not an empty string, we can probably do something with it. */
 				if(strlen(tempstr) > 0)
 				{
 					/* If we're at the first token in the line, and the last character is a ":", it's a label. */
 					if(tokennum == 1 && tempstr[strlen(tempstr) - 1] == ':')
 					{
+						char *oldstr;
+						char *newstr = NULL;
 						withlabel = 1;
+						if(!firstdata)
+						{
+							tokennum++;
+							tokens = strtok(NULL, delims);
+							newstr = trim(tokens);
+							if(newstr != NULL && strlen(newstr) > 0)
+							{
+								oldstr = tempstr;
+								tempstr = trim(tokens);
+								if(strcmp(tempstr, ".data") == 0)
+								{
+									newstr = realloc(newstr, strlen("D_SEC:\n") + strlen(oldstr));
+									sprintf(newstr, "%s\n%s", "D_SEC:", oldstr);
+									fputs(newstr, outasm);
+									firstdata++;
+								}
+								else
+								{
+									fputs(oldstr, outasm);
+									/*fputs(" ", outasm);
+									fputs(newstr, outasm);*/
+								}
+							}
+							else
+							{
+								fputs(tempstr, outasm);
+								alreadyprinted = 1;
+							}
+						}
+					}
+					/* If the first token on this line (or the second if we have a label) is "INF", record this... */
+					else if(tokennum == (unsigned int) (1 + withlabel) && strcmp(tempstr, "INF") == 0)
+					{
+						inf = 1;
+						header = fopen("header", "w");
+						if(header == NULL)
+						{
+							perror("Could not open temporary header file");
+							return 33;
+						}
+						fputs("INF\n", header);
 					}
 					/* If the first token on this line (or the second if we have a label) is ".data", record this... */
 					else if(tokennum == (unsigned int) (1 + withlabel) && strcmp(tempstr, ".data") == 0)
 					{
 						dotdata = 1;
+						if(!firstdata)
+						{
+							fputs("D_SEC:\n", outasm);
+							firstdata++;
+						}
+					}
+					/* If the first token on this line (or the second if we have a label) is ".ascii", record this... */
+					else if(tokennum == (unsigned int) (1 + withlabel) && strcmp(tempstr, ".ascii") == 0)
+					{
+						dotascii = 1;
+					}
+					/* If the first token on this line (or the second if we have a label) is ".asciiz", record this... */
+					else if(tokennum == (unsigned int) (1 + withlabel) && strcmp(tempstr, ".asciiz") == 0)
+					{
+						dotasciiz = 1;
+					}
+					else if((dotascii || dotasciiz))
+					{
+						uint16_t backslashes = 0;
+						unsigned char foundquote = 0;
+						uint16_t totallen = 0;
+						
+						totallen = strlen(tempstr);
+						
+						while(foundquote < 2)
+						{
+							puts(tempstr);
+							for(i = 0; i < strlen(tempstr); i++)
+							{
+								if(tempstr[i] == '\\')
+								{
+									backslashes++;
+									if(tempstr[i+1] == '"')
+									{
+										i++;
+										continue;
+									}
+								}
+								if(tempstr[i] == '"')
+								{
+									foundquote++;
+								}
+							}
+							if(foundquote == 2)
+							{
+								break;
+							}
+							fputs(" ", outasm);
+							fputs(tempstr, outasm);
+							tokens = strtok(NULL, delims);
+							tempstr = trim(tokens);
+							totallen += strlen(tempstr) + 1;
+						}
+						printf("totallen: %hu, backslashes: %hu\n", totallen, backslashes);
+						dotdatasize = totallen - 2 + dotasciiz - backslashes;
+						addsize(dotdatasize, &currsize, &datasizes, &numdatasizes);
+						dotasciiz = 0;
+						dotascii = 0;
+					}
+					else if(inf == 1)
+					{
+						uint16_t baseaddr = 0;
+						
+						fputs("PINF\n", header);
+						baseaddr = estrtoul(tempstr, &endptr, STDHEX);
+						if(tempstr == endptr)
+						{
+							fprintf(header, "BADR %s\n", findreplace(tempstr, replaces, numreplaces, dotdatasize, dotdata));
+						}
+						else
+						{
+							fprintf(header, "BADR 0x%04X\n", baseaddr);
+						}
+						fputs("EPINF", header);
+						fprintf(header, "\nDSEC D_SEC\n");
+						inf = 0;
+						collectdata = 1;
+						FILELINE++;
+						/* Free getline's buffer and make sure we tell it to allocate a new one. */
+						free(line);
+						line = NULL;
+						len = 0;
+						linelen = getline(&line, &len, inasm);
+						tokens = strtok(line, delims);
+						tokennum = 1;
+						continue;
+					}
+					else if(inf == 2)
+					{
+						uint16_t baseaddr = 0;
+
+						if(!strcmp("PINF", tempstr))
+						{
+							fputs(tempstr, header);
+							while(strcmp("EPINF", tempstr))
+							{
+								tokens = strtok(NULL, delims);
+								while(tokens != NULL)
+								{
+									tempstr = trim(tokens);
+									fputs(" ", header);
+									fputs(tempstr, header);
+									tokens = strtok(NULL, delims);
+								}
+								fputs("\n", header);
+								/* Get the next line of the file... */
+								FILELINE++;
+								/* Free getline's buffer and make sure we tell it to allocate a new one. */
+								free(line);
+								line = NULL;
+								len = 0;
+								linelen = getline(&line, &len, inasm);
+								tokens = strtok(line, delims);
+								tokennum = 1;
+								tempstr = trim(tokens);
+								if(tempstr == NULL)
+								{
+									fprintf(stderr, "Line %llu in input assembly file: invalid INF header.\n", FILELINE);
+									fclose(header);
+									fclose(outasm);
+									remove("header");
+									remove(argv[3]);
+									exit(34);
+								}
+								if(!strcmp("BADR", tempstr))
+								{
+									tokens = strtok(NULL, delims);
+									tempstr = trim(tokens);
+									if(tempstr == NULL)
+									{
+										fprintf(stderr, "Line %llu in input assembly file: base base address.\n", FILELINE);
+										fclose(header);
+										fclose(outasm);
+										remove("header");
+										remove(argv[3]);
+										exit(34);
+									}
+									baseaddr = estrtoul(tempstr, &endptr, STDHEX);
+									if(tempstr == endptr)
+									{
+										fprintf(header, "BADR %s", findreplace(tempstr, replaces, numreplaces, dotdatasize, dotdata));
+									}
+									else
+									{
+										fprintf(header, "BADR 0x%04X", baseaddr);
+									}
+								}
+								else
+								{
+									tempstr = trim(tokens);
+									fputs(tempstr, header);
+								}
+							}
+							FILELINE++;
+							/* Free getline's buffer and make sure we tell it to allocate a new one. */
+							free(line);
+							line = NULL;
+							len = 0;
+							linelen = getline(&line, &len, inasm);
+							FILELINE++;
+							/* Free getline's buffer and make sure we tell it to allocate a new one. */
+							free(line);
+							line = NULL;
+							len = 0;
+							linelen = getline(&line, &len, inasm);
+							tokens = strtok(line, delims);
+							tokennum = 1;
+							fprintf(header, "\nDSEC D_SEC\n");
+							inf = 0;
+							collectdata = 1;
+							continue;
+						}
 					}
 					/* If this line is a .data statement, the second token (or third if we have a label) is the size of the data section */
 					else if(tokennum == (unsigned int) (2 + withlabel) && dotdata)
 					{
 						/* Store the size to check later */
 						dotdatasize = estrtoul(tempstr, &endptr, STDHEX);
+						addsize(dotdatasize, &currsize, &datasizes, &numdatasizes);
 						/* A zero size data section is simply wrong */
 						if(dotdatasize == 0)
 						{
@@ -287,72 +485,24 @@ int main(int argc, char **argv)
 					/* For an instruction with a label, the second token (third with a label) is possibly the label we want to replace, with a data section it's the third (fourth with a label) */
 					else if((tokennum == (unsigned int) (2 + withlabel) && !dotdata) || (tokennum == (unsigned int) (3 + withlabel) && dotdata))
 					{
-						/* Check to see if there is a requested offset */
-						for(i = 0; i < strlen(tempstr); i++)
+						tempstr = findreplace(tempstr, replaces, numreplaces, dotdatasize, dotdata);
+						if(tempstr == NULL)
 						{
-							/* If there is a "[", there is */
-							if(tempstr[i] == '[')
-							{
-								/* Try to convert this offset to a number. Handle the fact the macro assembler produces hex values in a non-standard form without "0x". */
-								offset = estrtoul((tempstr + i + 1), &endptr, NSTDHEX);
-								/* If these two are equal, the value given in the square brackets was simply invalid */
-								if((tempstr + i + 1) == endptr)
-								{
-									fprintf(stderr, "Line %llu in input assembly file: invalid offset from label.\n", FILELINE);
-									/* Make sure to remove the output file so we do not leave incorrect or invalid assembly lying around. */
-									fclose(outasm);
-									remove(argv[3]);
-									return 12;
-								}
-								/* If the endptr does not point to the end of the current token, or the end of the current token isn't "]", the offset has been given in the incorrect form */
-								if((tempstr + strlen(tempstr) - 1) != endptr || tempstr[strlen(tempstr) - 1] != ']')
-								{
-									fprintf(stderr, "Line %llu in input assembly file: label offsets must be in form LABEL[OFFSET].\n", FILELINE);
-									/* Make sure to remove the output file so we do not leave incorrect or invalid assembly lying around. */
-									fclose(outasm);
-									remove(argv[3]);
-									return 13;
-								}
-								/* If we do have an offset, terminate the string at the point we found the "[" so we can use the actual name of the label in searching for if we have a replacement address. */
-								tempstr[i] = '\0';
-							}
-						}
-						/* Look for a replacement to the current label */
-						for(i = 0; i < numreplaces; i++)
-						{
-							/* if we find one... */
-							if(strcmp(replaces[i].name, tempstr) == 0)
-							{
-								/* Check the data storage size to see if it is correct, if not whine and die */
-								if(dotdatasize < 4 && dotdata)
-								{
-									fprintf(stderr, "Line %llu in input assembly file: .data storage size must be at least 4 nibbles to store a memory address.\n", FILELINE);
-									/* Make sure to remove the output file so we do not leave incorrect or invalid assembly lying around. */
-									fclose(outasm);
-									remove(argv[3]);
-									return 11;
-								}
-								/* Free the temporary string as we just need to write out the number now */
-								free(tempstr);
-								/* Allocating 20 bytes should hold the maximum possible number on a 64-bit platform, so we should be fine... */
-								tempstr = calloc(1, 20);
-								if(tempstr == NULL)
-								{
-									perror("Could not allocate memory");
-									return 14;
-								}
-								/* Write the address + the offset to the string to be written to the output file. */
-								sprintf(tempstr, "0x%X", replaces[i].addr + offset);
-							}
+							fclose(outasm);
+							remove(argv[3]);
+							exit(14);
 						}
 					}
-					/* If we're not the first token, put a space before we write the string. */
-					if(tokennum > 1)
+					if(inf == 0 && !alreadyprinted)
 					{
-						fputs(" ", outasm);
+						/* If we're not the first token, put a space before we write the string. */
+						if(tokennum > 1)
+						{
+							fputs(" ", outasm);
+						}
+						/* Write the current string to the output file. */
+						fputs(tempstr, outasm);
 					}
-					/* Write the current string to the output file. */
-					fputs(tempstr, outasm);
 				}
 				/* We've finished using this string, free it. */
 				free(tempstr);
@@ -372,6 +522,41 @@ int main(int argc, char **argv)
 			line = NULL;
 			len = 0;
 			linelen = getline(&line, &len, inasm);
+			if(inf > 0)
+			{
+				inf++;
+			}
+		}
+		fclose(inasm);
+		if(collectdata && (header != NULL))
+		{
+			for(i = 0; i < numdatasizes; i++)
+			{
+				fprintf(header, "DNUM 0x%X\nDSIZE 0x%X\n", datasizes[i].num, datasizes[i].size);
+			}
+			fputs("EINF\n", header);
+			fclose(outasm);
+			fclose(header);
+			rename(argv[3], "texttemp");
+			rename("header", argv[3]);
+			outasm = fopen("texttemp", "r");
+			header = fopen(argv[3], "a");
+			free(line);
+			line = NULL;
+			len = 0;
+			linelen = getline(&line, &len, outasm);
+			while(linelen > -1)
+			{
+				if(!isspace((unsigned char)line[0]))
+				{
+					fputs(line, header);
+				}
+				free(line);
+				line = NULL;
+				len = 0;
+				linelen = getline(&line, &len, outasm);
+			}
+			fclose(header);
 		}
 		/* Free the list of replacements and close all the files - we're done our work here. */		
 		for(i = 0; i < numreplaces; i++)
@@ -379,11 +564,147 @@ int main(int argc, char **argv)
 			free(replaces[i].name);
 		}
 		free(replaces);
-		fclose(inasm);
 		fclose(outasm);
 	}
 
 	return 0;
+}
+
+char *trim(char *str)
+{
+	unsigned int i = 0;
+	unsigned int j = 0;
+	char empty[1] = {'\0'};
+	char *retstr = NULL;
+
+	if(str == NULL)
+	{
+		return NULL;
+	}
+	
+	while(isspace((unsigned char)str[i]))
+	{	
+		i++;
+		/* If we travel past the end of the string, the string is empty. */
+		if(i > strlen(str))
+		{
+			retstr = empty;
+			return retstr;
+		}
+	}
+	retstr = calloc(1, strlen(str));
+	if(retstr == NULL)
+	{
+		perror("Could not allocate memory");
+		exit(4);
+	}
+	/* Trim trailing whitespace. Same process as done above, could really be part of a function. */
+	for(i = i, j = 0; i < strlen(str) && j < strlen(str); i++, j++)
+	{
+		if(isspace((unsigned char)str[i]))
+		{
+			break;
+		}
+		retstr[j] = str[i];
+	}
+	/* Terminate the string here as it is the end, and stop some potential weirdness. */
+	retstr[j] = '\0';
+	
+	return retstr;
+}
+
+char *findreplace(char *str, replace *replaces, unsigned long numreplaces, uint16_t dotdatasize, unsigned char dotdata)
+{
+	char *retstr = NULL;
+	char *endptr = NULL;
+	unsigned int i = 0;
+	unsigned int offset = 0;
+	
+	/* Check to see if there is a requested offset */
+	for(i = 0; i < strlen(str); i++)
+	{
+		/* If there is a "[", there is */
+		if(str[i] == '[')
+		{
+			/* Try to convert this offset to a number. Handle the fact the macro assembler produces hex values in a non-standard form without "0x". */
+			offset = estrtoul((str + i + 1), &endptr, NSTDHEX);
+			/* If these two are equal, the value given in the square brackets was simply invalid */
+			if((str + i + 1) == endptr)
+			{
+				fprintf(stderr, "Line %llu in input assembly file: invalid offset from label.\n", FILELINE);
+				/* Make sure to remove the output file so we do not leave incorrect or invalid assembly lying around. */
+				return NULL;
+			}
+			/* If the endptr does not point to the end of the current token, or the end of the current token isn't "]", the offset has been given in the incorrect form */
+			if((str + strlen(str) - 1) != endptr || str[strlen(str) - 1] != ']')
+			{
+				fprintf(stderr, "Line %llu in input assembly file: label offsets must be in form LABEL[OFFSET].\n", FILELINE);
+				/* Make sure to remove the output file so we do not leave incorrect or invalid assembly lying around. */
+				return NULL;
+			}
+			/* If we do have an offset, terminate the string at the point we found the "[" so we can use the actual name of the label in searching for if we have a replacement address. */
+			str[i] = '\0';
+		}
+	}
+	/* Look for a replacement to the current label */
+	for(i = 0; i < numreplaces; i++)
+	{
+		/* if we find one... */
+		if(strcmp(replaces[i].name, str) == 0)
+		{
+			/* Check the data storage size to see if it is correct, if not whine and die */
+			if(dotdatasize < 4 && dotdata)
+			{
+				fprintf(stderr, "Line %llu in input assembly file: .data storage size must be at least 4 nibbles to store a memory address.\n", FILELINE);
+				/* Make sure to remove the output file so we do not leave incorrect or invalid assembly lying around. */
+				return NULL;
+			}
+			/* Allocating 20 bytes should hold the maximum possible number on a 64-bit platform, so we should be fine... */
+			free(str);
+			retstr = calloc(1, 20);
+			if(retstr == NULL)
+			{
+				perror("Could not allocate memory");
+				exit(14);
+			}
+			/* Write the address + the offset to the string to be written to the output file. */		
+			sprintf(retstr, "0x%04X", replaces[i].addr + offset);
+			return retstr;
+		}
+	}
+	return str;
+}
+
+void addsize(uint16_t size, uint16_t *currsize, datasize **datasizes, unsigned long *numdatasizes)
+{
+	if(size > 0)
+	{
+		if(datasizes == NULL || currsize == NULL || numdatasizes == NULL)
+		{
+			return;			
+		}
+		else if((*datasizes) == NULL)
+		{
+			(*datasizes) = malloc(sizeof(datasize));
+			(*numdatasizes) = 1;
+			(*datasizes)[0].size = size;
+			(*datasizes)[0].num = 1;
+			(*currsize) = size;
+			return;
+		}
+		else if((*currsize) == size)
+		{
+			(*datasizes)[(*numdatasizes) - 1].num += 1;
+		}
+		else
+		{
+			(*numdatasizes) += 1;
+			(*datasizes) = realloc((*datasizes), sizeof(datasize) * (*numdatasizes));
+			(*datasizes)[(*numdatasizes) - 1].size = size;
+			(*datasizes)[(*numdatasizes) - 1].num = 1;
+			(*currsize) = size;
+		}
+	}
 }
 
 /* Listo! */

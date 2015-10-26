@@ -1,0 +1,9 @@
+INF
+PINF
+HURP
+ZURP 0x12
+BADR 0x8
+EPINF
+EINF
+LOD blah
+blah: .data 4 2
