@@ -27,7 +27,7 @@ typedef struct _replace {
 	char *name;
 	uint16_t addr;
 } replace;
-
+/* This is the data structure used to define .data sizes. */
 typedef struct datasize {
 	uint16_t size;
 	uint16_t num;
@@ -39,11 +39,11 @@ typedef struct datasize {
 long estrtol(char *str, char **endptr, uint8_t type);
 
 unsigned long estrtoul(char *str, char **endptr, uint8_t type);
-
+/* Trim whitespace */
 char *trim(char *str);
-
+/* Find replacable labels. */
 char *findreplace(char *str, replace *replaces, unsigned long numreplaces, uint16_t dotdatasize, unsigned char dotdata);
-
+/* Add a .data's size to the size list. */
 static void addsize(uint16_t size, uint16_t *currsize, datasize **datasizes, unsigned long *numdatasizes);
 
 #endif /* _LR4_H_ */

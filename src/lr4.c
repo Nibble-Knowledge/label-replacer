@@ -247,32 +247,39 @@ int main(int argc, char **argv)
 						char *oldstr;
 						char *newstr = NULL;
 						withlabel = 1;
-						if(!firstdata)
+						/* If we are trying to print the label to the data section, we need to check each label until we get there to see if there is a .data after it (because that's where they usually are) */
+						if(!firstdata && collectdata)
 						{
 							tokennum++;
 							tokens = strtok(NULL, delims);
 							newstr = trim(tokens);
+							/* If there is a token after... */
 							if(newstr != NULL && strlen(newstr) > 0)
 							{
+								/* Save the current string to print later... */
 								oldstr = tempstr;
+								/* Get a new one and check if it is .data */
 								tempstr = trim(tokens);
 								if(strcmp(tempstr, ".data") == 0)
 								{
+									/* If it is, it's the first .data location, add the D_SEC label and the label for the .data together. */
 									newstr = realloc(newstr, strlen("D_SEC:\n") + strlen(oldstr));
 									sprintf(newstr, "%s\n%s", "D_SEC:", oldstr);
 									fputs(newstr, outasm);
+									free(newstr);
+									free(oldstr);
 									firstdata++;
 								}
 								else
 								{
 									fputs(oldstr, outasm);
-									/*fputs(" ", outasm);
-									fputs(newstr, outasm);*/
 								}
 							}
 							else
 							{
+								/* Otherwise just print whatever is on this line. */
 								fputs(tempstr, outasm);
+								/* Gets double printed if this isn't here - not sure why... */
 								alreadyprinted = 1;
 							}
 						}
@@ -309,28 +316,38 @@ int main(int argc, char **argv)
 					{
 						dotasciiz = 1;
 					}
+					/* print out and measure the length of the dotascii and dotasciiz sections so we can record them in the header. */
 					else if((dotascii || dotasciiz))
 					{
+						/* Each backslash looks like two characters but it is actually one */
 						uint16_t backslashes = 0;
+						/* Keep going until the endquote */
 						unsigned char foundquote = 0;
+						/* total length */
 						uint16_t totallen = 0;
 						
+						/* Start with the length of this string. */
 						totallen = strlen(tempstr);
 						
+						/* Until we find the final quote... */
 						while(foundquote < 2)
 						{
-							puts(tempstr);
+							/* For each character in this section of the string */
 							for(i = 0; i < strlen(tempstr); i++)
 							{
+								/* If we find a backslash... */
 								if(tempstr[i] == '\\')
 								{
+									/* record it */
 									backslashes++;
+									/* Skip the next quote if it appears - it's not the endquote. */
 									if(tempstr[i+1] == '"')
 									{
 										i++;
 										continue;
 									}
 								}
+								/* If we find the endquote, tell the guard value... */
 								if(tempstr[i] == '"')
 								{
 									foundquote++;
@@ -340,35 +357,45 @@ int main(int argc, char **argv)
 							{
 								break;
 							}
+							/* Each tempstr is actually a space delimited section of a longer string */
 							fputs(" ", outasm);
 							fputs(tempstr, outasm);
 							tokens = strtok(NULL, delims);
 							tempstr = trim(tokens);
 							totallen += strlen(tempstr) + 1;
 						}
-						printf("totallen: %hu, backslashes: %hu\n", totallen, backslashes);
+						/* The size of this string is the total length minus the quotes, plus the possible zero terminator, and minus the amount of backslashes. */
 						dotdatasize = totallen - 2 + dotasciiz - backslashes;
 						addsize(dotdatasize, &currsize, &datasizes, &numdatasizes);
 						dotasciiz = 0;
 						dotascii = 0;
 					}
+					/* If inf is one, it is the automatic header specified by INF BASEADDRESS */
 					else if(inf == 1)
 					{
 						uint16_t baseaddr = 0;
-						
+						/* Write out the header */
 						fputs("PINF\n", header);
+						/* The current token should be the base address, as the INF has just been written. */
+						/* Try to convert it. If it's an invalid address, it's probably a label. */
 						baseaddr = estrtoul(tempstr, &endptr, STDHEX);
+						
 						if(tempstr == endptr)
 						{
+							/* If the label is invalid, the assembler will catch it. */
 							fprintf(header, "BADR %s\n", findreplace(tempstr, replaces, numreplaces, dotdatasize, dotdata));
 						}
 						else
 						{
+							/* Otherwise just write the number. */
 							fprintf(header, "BADR 0x%04X\n", baseaddr);
 						}
+						/* End the executable information header */
 						fputs("EPINF", header);
+						/* Write the standard data section, we'll add the label later. */
 						fprintf(header, "\nDSEC D_SEC\n");
 						inf = 0;
+						/* make sure the rest of the program reports on the .data sections. */
 						collectdata = 1;
 						FILELINE++;
 						/* Free getline's buffer and make sure we tell it to allocate a new one. */
@@ -380,16 +407,21 @@ int main(int argc, char **argv)
 						tokennum = 1;
 						continue;
 					}
+					/* If inf is two, an INF was declared and the specifics of the header are being explicitly specified (instead of the automatic header generation above). */ 
 					else if(inf == 2)
 					{
 						uint16_t baseaddr = 0;
-
+						/* Right after the INF, we should have the PINF which starts the executable information section. */
 						if(!strcmp("PINF", tempstr))
 						{
+							/* write that to the header. */
 							fputs(tempstr, header);
+							/* Until we reach the end of the executable information section (EPINF, strcmp("EPINF", tempstr) != 0) */
 							while(strcmp("EPINF", tempstr))
 							{
+								/* Directly write everything we find in here to the header without changing it (except for trimming whitespace), with the exception of the BADR (base address) */
 								tokens = strtok(NULL, delims);
+								/* Write the entire line */
 								while(tokens != NULL)
 								{
 									tempstr = trim(tokens);
@@ -405,6 +437,16 @@ int main(int argc, char **argv)
 								line = NULL;
 								len = 0;
 								linelen = getline(&line, &len, inasm);
+								/* If we loop to the end of the file, this is obviously wrong. */
+								if(linelen < 0)
+								{
+									fprintf(stderr, "Input assembly file: PINF with no EPINF!\n", FILELINE);
+									fclose(header);
+									fclose(outasm);
+									remove("header");
+									remove(argv[3]);
+									exit(34);
+								}
 								tokens = strtok(line, delims);
 								tokennum = 1;
 								tempstr = trim(tokens);
@@ -417,41 +459,59 @@ int main(int argc, char **argv)
 									remove(argv[3]);
 									exit(34);
 								}
+								/* If we find the BADR... */
 								if(!strcmp("BADR", tempstr))
 								{
+									/* Get the next token (which should be the base address itself) */
 									tokens = strtok(NULL, delims);
 									tempstr = trim(tokens);
 									if(tempstr == NULL)
 									{
-										fprintf(stderr, "Line %llu in input assembly file: base base address.\n", FILELINE);
+										fprintf(stderr, "Line %llu in input assembly file: invalid base address.\n", FILELINE);
 										fclose(header);
 										fclose(outasm);
 										remove("header");
 										remove(argv[3]);
 										exit(34);
 									}
+									/* Try to convert it. If it's an invalid address, it's probably a label. */
 									baseaddr = estrtoul(tempstr, &endptr, STDHEX);
 									if(tempstr == endptr)
 									{
+										/* If the label is invalid, the assembler will catch it. */
 										fprintf(header, "BADR %s", findreplace(tempstr, replaces, numreplaces, dotdatasize, dotdata));
 									}
 									else
 									{
+										/* Otherwise just write the number. */
 										fprintf(header, "BADR 0x%04X", baseaddr);
 									}
 								}
+								/* If it's not BADR, just write it. */
 								else
 								{
 									tempstr = trim(tokens);
 									fputs(tempstr, header);
 								}
 							}
+							/* If we find the EPINF, we've written it above. */
+							/* The next line must be the EINF, so skip two. */
 							FILELINE++;
 							/* Free getline's buffer and make sure we tell it to allocate a new one. */
 							free(line);
 							line = NULL;
 							len = 0;
 							linelen = getline(&line, &len, inasm);
+							/* This is where the EINF should be. */
+							if(strcmp("EINF", trim(line)))
+							{
+								fprintf(stderr, "Line %llu in input assembly file: INF with no EINF!\n", FILELINE);
+								fclose(header);
+								fclose(outasm);
+								remove("header");
+								remove(argv[3]);
+								exit(34);
+							}
 							FILELINE++;
 							/* Free getline's buffer and make sure we tell it to allocate a new one. */
 							free(line);
@@ -460,10 +520,21 @@ int main(int argc, char **argv)
 							linelen = getline(&line, &len, inasm);
 							tokens = strtok(line, delims);
 							tokennum = 1;
+							/* Write the boilerplate DSEC to the header. We'll add the label to the assembly later. */
 							fprintf(header, "\nDSEC D_SEC\n");
 							inf = 0;
+							/* Make sure the rest of the program reports on the .data sections. */
 							collectdata = 1;
 							continue;
+						}
+						/* If the PINF isn't here, the INF is invalid. */
+						else
+						{
+							fprintf(stderr, "Input assembly file: invalid INF header\n", FILELINE);
+							fclose(outasm);
+							fclose(header);
+							remove("header");
+							remove(argv[3]);
 						}
 					}
 					/* If this line is a .data statement, the second token (or third if we have a label) is the size of the data section */
@@ -527,16 +598,22 @@ int main(int argc, char **argv)
 				inf++;
 			}
 		}
+		/* The input assembly file has no more data for us. */
 		fclose(inasm);
+		/* If collectdata is true, we need to print out the rest of the header. */
 		if(collectdata && (header != NULL))
 		{
+			/* Print all the data section sizes */
 			for(i = 0; i < numdatasizes; i++)
 			{
 				fprintf(header, "DNUM 0x%X\nDSIZE 0x%X\n", datasizes[i].num, datasizes[i].size);
 			}
+			/* End of the header */
 			fputs("EINF\n", header);
+			/* Instead of making an internal buffer, move the header file to the name of the output file and append the rest of the assembly below it. */
 			fclose(outasm);
 			fclose(header);
+			remove("texttemp");
 			rename(argv[3], "texttemp");
 			rename("header", argv[3]);
 			outasm = fopen("texttemp", "r");
@@ -545,8 +622,10 @@ int main(int argc, char **argv)
 			line = NULL;
 			len = 0;
 			linelen = getline(&line, &len, outasm);
+			/* Copy every line one by one */
 			while(linelen > -1)
 			{
+				/* If it starts with a space, it's likely an empty line so skip it. */
 				if(!isspace((unsigned char)line[0]))
 				{
 					fputs(line, header);
@@ -556,8 +635,14 @@ int main(int argc, char **argv)
 				len = 0;
 				linelen = getline(&line, &len, outasm);
 			}
+			/* If no replaces, the header should be at the end of the file. */
+			if(numdatasizes == 0)
+			{
+				fputs("D_SEC:", header);
+			}
 			fclose(header);
 		}
+
 		/* Free the list of replacements and close all the files - we're done our work here. */		
 		for(i = 0; i < numreplaces; i++)
 		{
@@ -565,11 +650,12 @@ int main(int argc, char **argv)
 		}
 		free(replaces);
 		fclose(outasm);
+		remove("texttemp");
 	}
 
 	return 0;
 }
-
+/* Whitespace trimming function. */
 char *trim(char *str)
 {
 	unsigned int i = 0;
@@ -581,7 +667,7 @@ char *trim(char *str)
 	{
 		return NULL;
 	}
-	
+	/* Trim leading whitespace */
 	while(isspace((unsigned char)str[i]))
 	{	
 		i++;
@@ -598,7 +684,7 @@ char *trim(char *str)
 		perror("Could not allocate memory");
 		exit(4);
 	}
-	/* Trim trailing whitespace. Same process as done above, could really be part of a function. */
+	/* Trim trailing whitespace. */
 	for(i = i, j = 0; i < strlen(str) && j < strlen(str); i++, j++)
 	{
 		if(isspace((unsigned char)str[i]))
@@ -612,7 +698,7 @@ char *trim(char *str)
 	
 	return retstr;
 }
-
+/* This function searches if the label needs replacing, and if it does, returns the replacement */
 char *findreplace(char *str, replace *replaces, unsigned long numreplaces, uint16_t dotdatasize, unsigned char dotdata)
 {
 	char *retstr = NULL;
@@ -674,7 +760,7 @@ char *findreplace(char *str, replace *replaces, unsigned long numreplaces, uint1
 	}
 	return str;
 }
-
+/* This function add's a dot data's size to the output header. Used for the metadata section. */
 void addsize(uint16_t size, uint16_t *currsize, datasize **datasizes, unsigned long *numdatasizes)
 {
 	if(size > 0)
@@ -683,6 +769,7 @@ void addsize(uint16_t size, uint16_t *currsize, datasize **datasizes, unsigned l
 		{
 			return;			
 		}
+		/* If the datasizes list is empty, this is obviously a unique size. */
 		else if((*datasizes) == NULL)
 		{
 			(*datasizes) = malloc(sizeof(datasize));
@@ -692,10 +779,12 @@ void addsize(uint16_t size, uint16_t *currsize, datasize **datasizes, unsigned l
 			(*currsize) = size;
 			return;
 		}
+		/* If the current size input is the same as the size of the dot data we are adding, just increment the num of dot data sections. */
 		else if((*currsize) == size)
 		{
 			(*datasizes)[(*numdatasizes) - 1].num += 1;
 		}
+		/* Otherwise, we add a new element to the list with one data section of the input size. */
 		else
 		{
 			(*numdatasizes) += 1;
