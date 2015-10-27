@@ -219,10 +219,6 @@ int main(int argc, char **argv)
 			unsigned char dotasciiz = 0;
 			/* What size the .data statement is - if we are replacing a label and it is not 4, there's a problem! */
 			unsigned long dotdatasize = 0;
-			/* The offset from the label location requested. */
-			uint16_t offset = 0;
-			/* Generic looping unit. */
-			unsigned int j = 0;
 			/* If this is a comment line. Helps to skip printing useless whitespace. */
 			unsigned char comment = 0;
 			unsigned char alreadyprinted = 0;
@@ -365,7 +361,7 @@ int main(int argc, char **argv)
 							totallen += strlen(tempstr) + 1;
 						}
 						/* The size of this string is the total length minus the quotes, plus the possible zero terminator, and minus the amount of backslashes. */
-						dotdatasize = totallen - 2 + dotasciiz - backslashes;
+						dotdatasize = totallen - (unsigned int) 2 + dotasciiz - backslashes;
 						addsize(dotdatasize, &currsize, &datasizes, &numdatasizes);
 						dotasciiz = 0;
 						dotascii = 0;
@@ -411,6 +407,7 @@ int main(int argc, char **argv)
 					else if(inf == 2)
 					{
 						uint16_t baseaddr = 0;
+						unsigned char foundbaseaddr = 0;
 						/* Right after the INF, we should have the PINF which starts the executable information section. */
 						if(!strcmp("PINF", tempstr))
 						{
@@ -440,7 +437,7 @@ int main(int argc, char **argv)
 								/* If we loop to the end of the file, this is obviously wrong. */
 								if(linelen < 0)
 								{
-									fprintf(stderr, "Input assembly file: PINF with no EPINF!\n", FILELINE);
+									fprintf(stderr, "Input assembly file: PINF with no EPINF!\n");
 									fclose(header);
 									fclose(outasm);
 									remove("header");
@@ -462,6 +459,8 @@ int main(int argc, char **argv)
 								/* If we find the BADR... */
 								if(!strcmp("BADR", tempstr))
 								{
+									/* We found the base address... */
+									foundbaseaddr = 1;
 									/* Get the next token (which should be the base address itself) */
 									tokens = strtok(NULL, delims);
 									tempstr = trim(tokens);
@@ -490,6 +489,15 @@ int main(int argc, char **argv)
 								/* If it's not BADR, just write it. */
 								else
 								{
+									if(foundbaseaddr == 0)
+									{
+										fprintf(stderr, "Line %llu in input assembly file: BADR must precede all pseudo-instructions!.\n", FILELINE);
+										fclose(header);
+										fclose(outasm);
+										remove("header");
+										remove(argv[3]);
+										exit(34);
+									}
 									tempstr = trim(tokens);
 									fputs(tempstr, header);
 								}
@@ -530,7 +538,7 @@ int main(int argc, char **argv)
 						/* If the PINF isn't here, the INF is invalid. */
 						else
 						{
-							fprintf(stderr, "Input assembly file: invalid INF header\n", FILELINE);
+							fprintf(stderr, "Input assembly file: invalid INF header\n");
 							fclose(outasm);
 							fclose(header);
 							remove("header");

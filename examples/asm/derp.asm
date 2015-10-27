@@ -1,8 +1,8 @@
 INF
 PINF
+BADR BASEADDR
 HURP
 ZURP 0x12
-BADR BASEADDR
 EPINF
 EINF
 ; This program reads in integers and adds them together
