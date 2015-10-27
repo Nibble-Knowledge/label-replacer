@@ -24,6 +24,45 @@ Definition files have a very simple format. There are only 2 allowed constructs:
 	* In the case of OFFSET: hexadecimal may be without prefix or with "0x", but decimal requires a "0d" prefix. This is to accomodate the macro assembler. 
 	* Octal always requires a prefix, either "0" or "0o"; and binary always requires the prefix "0b".
 
+### INF header ###
+LR4 also generates INF headers for [AS4](http://github.com/Nibble-Knowledge/cpu-assembler "AS4") if prompted, either by using the syntax "INF BASE_ADDRESS" or by utilising the same syntax as required in AS4 but excluding any data section information (as LR4 generates this). Examples are below:
+* INF BASE_ADDRESS:
+
+```nasm
+INF 0x16
+LOD data
+HLT
+data: .data 1 0x0
+```
+* Detailed INF:
+
+```nasm
+INF
+PINF
+BADR 0x16
+EPINF
+EINF
+LOD data
+HLT
+data: .data 1 0x0
+```
+
+* Both will become:
+```nasm
+INF
+PINF
+BADR 0x0016
+EPINF
+DSEC D_SEC
+DNUM 0x1
+DSIZE 0x1
+EINF
+LOD data
+HLT
+D_SEC: data: .data 1 0x0
+```
+Custom pseudo instructions will be passed through untouched in the PINF...EPINF section.
+
 ### Example definition file ###
 
 ```nasm
