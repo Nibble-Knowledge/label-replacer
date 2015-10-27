@@ -61,7 +61,7 @@ LOD data
 HLT
 D_SEC: data: .data 1 0x0
 ```
-Custom pseudo instructions will be passed through untouched in the PINF...EPINF section.
+Custom pseudo instructions will be passed through untouched in the PINF...EPINF section. BADR must precede all pseudo instructions.
 
 ### Example definition file ###
 
