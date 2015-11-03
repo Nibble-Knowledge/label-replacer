@@ -2,6 +2,8 @@
 /* This is the main file for the label replacer. */
 
 unsigned long long FILELINE = 0;
+unsigned char N_DEFINED = 0;
+unsigned char N_NEEDED = 0;
 
 /* Engage! */
 int main(int argc, char **argv)
@@ -147,6 +149,11 @@ int main(int argc, char **argv)
 						return 6;
 					}
 					replaces[numreplaces - 1].name = tempstr;
+					/* If the label is "N_", we have the static numbers defined. Used later for optimisation of address-of operations. */
+					if(!strcmp("N_", tempstr))
+					{
+						N_DEFINED = 1;
+					}
 				}
 				/* If we're at the second element, we need to save the memory address. */
 				else if(ele == 2)
@@ -296,7 +303,7 @@ int main(int argc, char **argv)
 					else if(tokennum == (unsigned int) (1 + withlabel) && strcmp(tempstr, ".data") == 0)
 					{
 						dotdata = 1;
-						if(!firstdata)
+						if(!firstdata && collectdata)
 						{
 							fputs("D_SEC:\n", outasm);
 							firstdata++;
@@ -601,6 +608,14 @@ int main(int argc, char **argv)
 			line = NULL;
 			len = 0;
 			linelen = getline(&line, &len, inasm);
+			if(N_NEEDED == 1 && linelen == -1)
+			{
+				line = calloc(1, 34);
+				memcpy(line, "N_: .data 16 0x0123456789ABCDEF\n", 32);
+				linelen = strlen(line);
+				N_NEEDED = 2;
+				N_DEFINED = 1;
+			}
 			if(inf > 0)
 			{
 				inf++;
@@ -611,11 +626,21 @@ int main(int argc, char **argv)
 		/* If collectdata is true, we need to print out the rest of the header. */
 		if(collectdata && (header != NULL))
 		{
+			char *nstartstr = NULL;
+			char *N_ = NULL;
+
 			/* Print all the data section sizes */
 			for(i = 0; i < numdatasizes; i++)
 			{
 				fprintf(header, "DNUM 0x%X\nDSIZE 0x%X\n", datasizes[i].num, datasizes[i].size);
 			}
+			/* If N_DEFINED is 1, put the information for the low level assembler. Allocate 13 plus a little extra... should be enough!*/
+			nstartstr = calloc(1, 20);
+			N_ = calloc(1, 4);
+			memcpy(N_, "N_", 4);
+			sprintf(nstartstr, "NSTART %s\n", findreplace(N_, replaces, numreplaces, 0, 0));
+			fputs(nstartstr, header);
+			free(nstartstr);
 			/* End of the header */
 			fputs("EINF\n", header);
 			/* Instead of making an internal buffer, move the header file to the name of the output file and append the rest of the assembly below it. */
@@ -647,6 +672,7 @@ int main(int argc, char **argv)
 			if(numdatasizes == 0)
 			{
 				fputs("D_SEC:", header);
+				puts("huh?");
 			}
 			fclose(header);
 		}
@@ -713,7 +739,19 @@ char *findreplace(char *str, replace *replaces, unsigned long numreplaces, uint1
 	char *endptr = NULL;
 	unsigned int i = 0;
 	unsigned int offset = 0;
-	
+
+
+	/* Check if this is an address-of operation */
+	if(str[0] == '&')
+	{
+		/* If the static numbers are defined, the low level assembly will handle this. */
+		if(!N_DEFINED)
+		{
+			/* But if they are not, make sure we make them. */
+			N_NEEDED = 1;
+		}
+		return str;
+	}	
 	/* Check to see if there is a requested offset */
 	for(i = 0; i < strlen(str); i++)
 	{

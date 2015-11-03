@@ -19,8 +19,11 @@
 #define STDHEX 0
 #define NSTDHEX 1
 
-/* The singular global variable - what line of the assembly file we are on. Helps with error messages */
+/* What line of the assembly file we are on. Helps with error messages */
 extern unsigned long long FILELINE;
+/* If the N_ constants are defined. */
+extern unsigned char N_DEFINED;
+extern unsigned char N_NEEDED;
 
 /* This is the data structure used to define label replacements */
 typedef struct _replace {
