@@ -635,12 +635,15 @@ int main(int argc, char **argv)
 				fprintf(header, "DNUM 0x%X\nDSIZE 0x%X\n", datasizes[i].num, datasizes[i].size);
 			}
 			/* If N_DEFINED is 1, put the information for the low level assembler. Allocate 13 plus a little extra... should be enough!*/
-			nstartstr = calloc(1, 20);
-			N_ = calloc(1, 4);
-			memcpy(N_, "N_", 4);
-			sprintf(nstartstr, "NSTART %s\n", findreplace(N_, replaces, numreplaces, 0, 0));
-			fputs(nstartstr, header);
-			free(nstartstr);
+			if(N_DEFINED)
+			{
+				nstartstr = calloc(1, 20);
+				N_ = calloc(1, 4);
+				memcpy(N_, "N_", 4);
+				sprintf(nstartstr, "NSTART %s\n", findreplace(N_, replaces, numreplaces, 0, 0));
+				fputs(nstartstr, header);
+				free(nstartstr);
+			}
 			/* End of the header */
 			fputs("EINF\n", header);
 			/* Instead of making an internal buffer, move the header file to the name of the output file and append the rest of the assembly below it. */
@@ -672,11 +675,50 @@ int main(int argc, char **argv)
 			if(numdatasizes == 0)
 			{
 				fputs("D_SEC:", header);
-				puts("huh?");
 			}
 			fclose(header);
 		}
+		/* Make sure to print the N_ if it is defined. This also cleans whitespace... */
+		/* This is not the cleanest code to prepend the NSTART, and should probably be combined with the above case. */
+		else
+		{
+			char *nstartstr = NULL;
+			char *N_ = NULL;
 
+			fclose(outasm);
+			fclose(header);
+			remove("texttemp");
+			rename(argv[3], "texttemp");
+			outasm = fopen("texttemp", "r");
+			header = fopen(argv[3], "a");
+			if(N_DEFINED)
+			{
+				nstartstr = calloc(1, 20);
+				N_ = calloc(1, 4);
+				memcpy(N_, "N_", 4);
+				sprintf(nstartstr, "NSTART %s\n", findreplace(N_, replaces, numreplaces, 0, 0));
+				fputs(nstartstr, header);
+				free(nstartstr);
+			}
+			free(line);
+			line = NULL;
+			len = 0;
+			linelen = getline(&line, &len, outasm);
+			/* Copy every line one by one */
+			while(linelen > -1)
+			{
+				/* If it starts with a space, it's likely an empty line so skip it. */
+				if(!isspace((unsigned char)line[0]))
+				{
+					fputs(line, header);
+				}
+				free(line);
+				line = NULL;
+				len = 0;
+				linelen = getline(&line, &len, outasm);
+			}
+			fclose(header);		
+		}
 		/* Free the list of replacements and close all the files - we're done our work here. */		
 		for(i = 0; i < numreplaces; i++)
 		{
