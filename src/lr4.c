@@ -846,7 +846,17 @@ char *findreplace(char *str, replace *replaces, unsigned long numreplaces, uint1
 			return retstr;
 		}
 	}
-	return str;
+	if(offset != 0)
+	{
+		retstr = calloc(1, strlen(str) + 10);
+		sprintf(retstr, "%s[%x]", str, offset);
+		free(str);
+	}
+	else
+	{
+		retstr = str;
+	}
+	return retstr;
 }
 /* This function add's a dot data's size to the output header. Used for the metadata section. */
 void addsize(uint16_t size, uint16_t *currsize, datasize **datasizes, unsigned long *numdatasizes)
