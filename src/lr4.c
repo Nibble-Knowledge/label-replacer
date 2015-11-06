@@ -610,11 +610,36 @@ int main(int argc, char **argv)
 			linelen = getline(&line, &len, inasm);
 			if(N_NEEDED == 1 && linelen == -1)
 			{
-				line = calloc(1, 34);
-				memcpy(line, "N_: .data 16 0x0123456789ABCDEF\n", 32);
+				line = calloc(1, 21);
+				strcpy(line, "N_: .data 4 0x0123\n");
 				linelen = strlen(line);
 				N_NEEDED = 2;
 				N_DEFINED = 1;
+			}
+			else if(N_NEEDED == 2)
+			{
+				line = calloc(1, 18);
+				strcpy(line, ".data 4 0x4567\n");
+				linelen = strlen(line);
+				N_NEEDED = 3;
+
+			}
+			else if(N_NEEDED == 3)
+			{
+				line = calloc(1, 18);
+				strcpy(line, ".data 4 0x89AB\n");
+				linelen = strlen(line);
+				N_NEEDED = 4;
+				N_DEFINED = 1;
+
+			}
+			else if(N_NEEDED == 4)
+			{
+				line = calloc(1, 18);
+				strcpy(line, ".data 4 0xCDEF\n");
+				linelen = strlen(line);
+				N_NEEDED = 5;
+
 			}
 			if(inf > 0)
 			{

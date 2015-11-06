@@ -63,6 +63,8 @@ D_SEC: data: .data 1 0x0
 ```
 Custom pseudo instructions will be passed through untouched in the PINF...EPINF section. BADR must precede all pseudo instructions.
 
+The metadata pseudoinstruction "N_START LABEL" will be added to output if an address of operation is performed. It will be placed just before EINF. It is not included in output, it merely informs AS4 of the location of the start of the static number 0-15 in memory.
+
 ### Example definition file ###
 
 ```nasm
