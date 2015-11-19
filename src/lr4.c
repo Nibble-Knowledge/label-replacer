@@ -521,6 +521,7 @@ int main(int argc, char **argv)
 							if(strcmp("EINF", trim(line)))
 							{
 								fprintf(stderr, "Line %llu in input assembly file: INF with no EINF!\n", FILELINE);
+								
 								fclose(header);
 								fclose(outasm);
 								remove("header");
@@ -711,7 +712,6 @@ int main(int argc, char **argv)
 			char *N_ = NULL;
 
 			fclose(outasm);
-			fclose(header);
 			remove("texttemp");
 			rename(argv[3], "texttemp");
 			outasm = fopen("texttemp", "r");
