@@ -1,4 +1,4 @@
 INF 19
-NOP
+NOP *CHIP_SELECT
 HLT
 test: .data 2

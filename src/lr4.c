@@ -269,8 +269,8 @@ int main(int argc, char **argv)
 									newstr = realloc(newstr, strlen("D_SEC:\n") + strlen(oldstr));
 									sprintf(newstr, "%s\n%s", "D_SEC:", oldstr);
 									fputs(newstr, outasm);
-									free(newstr);
-									free(oldstr);
+									/*free(newstr);
+									free(oldstr);*/
 									firstdata++;
 									dotdata = 1;
 								}
@@ -573,6 +573,14 @@ int main(int argc, char **argv)
 					/* For an instruction with a label, the second token (third with a label) is possibly the label we want to replace, with a data section it's the third (fourth with a label) */
 					else if((tokennum == (unsigned int) (2 + withlabel) && !dotdata) || (tokennum == (unsigned int) (3 + withlabel) && dotdata))
 					{
+						if(tempstr[0] == '*')
+						{
+							for(i = 1; i < strlen(tempstr); i++)
+							{
+								tempstr[i-1] = tempstr[i];
+							}
+							tempstr[i-1] = '\0';
+						}
 						tempstr = findreplace(tempstr, replaces, numreplaces, dotdatasize, dotdata);
 						if(tempstr == NULL)
 						{
