@@ -272,6 +272,7 @@ int main(int argc, char **argv)
 									free(newstr);
 									free(oldstr);
 									firstdata++;
+									dotdata = 1;
 								}
 								else
 								{
