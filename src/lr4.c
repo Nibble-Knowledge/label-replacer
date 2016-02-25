@@ -603,6 +603,7 @@ int main(int argc, char **argv)
 				/* We've finished using this string, free it. */
 				free(tempstr);
 				/* Get the next token. */
+				printf("%s\n", tokens);
 				tokens = strtok(NULL, delims);
 				tokennum++;
 			}
