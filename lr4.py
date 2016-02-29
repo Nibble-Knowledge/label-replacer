@@ -25,6 +25,8 @@ def zerod(numstr):
 
 def replace(string):
 
+	if string[0] == "&":
+		return string
 	replacestr = string.split("[")[0]
 	if replacestr[0] == "*":
 		replacestr = replacestr[1:]
