@@ -235,6 +235,13 @@ def readinput(inputfile):
 	if gotdata == 0:
 		output.append("D_SEC:")
 
+def writeoutput(outputfile):
+	outputfile.truncate()
+	for line in header:
+		outputfile.write(line + "\n")
+	for line in output:
+		outputfile.write(line + "\n")
+
 if __name__ == '__main__':
 	if len(sys.argv) < 4:
 		useage()
@@ -248,9 +255,7 @@ if __name__ == '__main__':
 	readinput(inputfile)
 	inputfile.close()
 
-	for line in header:
-		print line
-	
-	for line in output:
-		print line
-	
+	outputfile = open(sys.argv[3], "w")
+	writeoutput(outputfile)
+	outputfile.close()
+
