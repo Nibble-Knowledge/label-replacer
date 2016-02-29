@@ -36,7 +36,11 @@ def replace(string):
 		offset = 0
 	else:
 		try:
-			offset = int(zerod(string.split("[")[1][:-1]), 0)
+			offsetstr = zerod(string.split("[")[1][:-1])
+			if offsetstr[0] != "0":
+				offset = int(offsetstr, 16)
+			else:
+				offset = int(offsetstr, 0)
 		except:
 			print "Invalid offset!"
 			sys.exit(1)
