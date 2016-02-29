@@ -42,7 +42,7 @@ def replace(string):
 			else:
 				offset = int(offsetstr, 0)
 		except:
-			print "Invalid offset!"
+			print "Invalid offset: " + string
 			sys.exit(1)
 
 	if replacestr in replaces:
